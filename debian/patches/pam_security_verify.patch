@@ -1,0 +1,43 @@
+Index: sudo/plugins/sudoers/auth/pam.c
+===================================================================
+--- sudo.orig/plugins/sudoers/auth/pam.c
++++ sudo/plugins/sudoers/auth/pam.c
+@@ -175,8 +175,9 @@ sudo_pam_init_quiet(struct passwd *pw, s
+ int
+ sudo_pam_verify(struct passwd *pw, char *prompt, sudo_auth *auth, struct sudo_conv_callback *callback)
+ {
+-    const char *s;
++    const char *s, *pam_item;
+     int *pam_status = (int *) auth->data;
++    int rc;
+     debug_decl(sudo_pam_verify, SUDOERS_DEBUG_AUTH)
+ 
+     def_prompt = prompt;	/* for converse */
+@@ -199,6 +200,12 @@ sudo_pam_verify(struct passwd *pw, char
+ 	    sudo_debug_printf(SUDO_DEBUG_WARN|SUDO_DEBUG_LINENO,
+ 		"pam_authenticate: %d", *pam_status);
+ 	    debug_return_int(AUTH_FAILURE);
++	case PAM_ABORT:
++	    rc = pam_get_item(pamh, PAM_SERVICE, &pam_item);
++	    if((rc != PAM_SUCCESS)&&(!strcmp(pam_item, "security-verify"))){
++		log_warningx(0, N_("No root privileges. Please request root access in developer mode in Control Center."));
++		debug_return_int(AUTH_FATAL);
++	    }
+ 	default:
+ 	    if ((s = pam_strerror(pamh, *pam_status)) != NULL)
+ 		log_warningx(0, N_("PAM authentication error: %s"), s);
+Index: sudo/plugins/sudoers/po/zh_CN.po
+===================================================================
+--- sudo.orig/plugins/sudoers/po/zh_CN.po
++++ sudo/plugins/sudoers/po/zh_CN.po
+@@ -355,6 +355,10 @@ msgstr "无法初始化 PAM"
+ msgid "PAM authentication error: %s"
+ msgstr "PAM 认证出错：%s"
+ 
++#: plugins/sudoers/auth/pam.c:209
++msgid "No root privileges. Please request root access in developer mode in Control Center."
++msgstr "无root权限，如想获得root权限可以在控制中心选择进入开发者模式"
++
+ #: plugins/sudoers/auth/pam.c:221
+ msgid "account validation failure, is your account locked?"
+ msgstr "账户验证失败，您的账户是不是上锁了？"
