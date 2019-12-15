@@ -19,7 +19,7 @@ Index: sudo/plugins/sudoers/auth/pam.c
  	    debug_return_int(AUTH_FAILURE);
 +	case PAM_ABORT:
 +	    rc = pam_get_item(pamh, PAM_SERVICE, &pam_item);
-+	    if((rc != PAM_SUCCESS)&&(!strcmp(pam_item, "security-verify"))){
++	    if((rc == PAM_SUCCESS)&&(!strcmp(pam_item, "security-verify"))){
 +		log_warningx(0, N_("No root privileges. Please request root access in developer mode in Control Center."));
 +		debug_return_int(AUTH_FATAL);
 +	    }
