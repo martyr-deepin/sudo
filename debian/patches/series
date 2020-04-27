@@ -2,3 +2,6 @@ typo-in-classic-insults.diff
 paths-in-samples.diff
 Whitelist-DPKG_COLORS-environment-variable.diff
 pam_security_verify.patch
+sudo_minus_1_uid.diff
+strtoid_minus_1_test_fix.diff
+Fix-a-buffer-overflow-when-pwfeedback-is-enabled-and.patch
