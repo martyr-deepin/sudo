@@ -1,0 +1,2 @@
+version=3
+opts=pgpsigurlmangle=s/$/.sig/ http://www.sudo.ws/sudo/dist/sudo-(.*)[.]tar[.]gz

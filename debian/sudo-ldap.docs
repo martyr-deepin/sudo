@@ -1,0 +1,7 @@
+debian/OPTIONS 
+doc/UPGRADE 
+doc/HISTORY 
+doc/TROUBLESHOOTING
+doc/schema.*
+README 
+README.LDAP 

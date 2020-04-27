@@ -1,0 +1,4 @@
+build-ldap/doc/sudo.mdoc
+build-ldap/doc/sudoers.mdoc
+build-ldap/doc/sudoers.ldap.mdoc
+build-ldap/doc/visudo.mdoc

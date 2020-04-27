@@ -1,0 +1,186 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+CFLAGS = `dpkg-buildflags --get CFLAGS`
+CFLAGS += -Wall -Wno-comment
+LDFLAGS = `dpkg-buildflags --get LDFLAGS`
+CPPFLAGS = `dpkg-buildflags --get CPPFLAGS`
+
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+DEB_HOST_ARCH_OS ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
+ifeq ($(DEB_HOST_ARCH_OS),linux)
+  configure_args += --with-selinux --with-linux-audit --enable-tmpfiles.d=yes
+endif
+
+reconf-stamp:
+	cp -f /usr/share/misc/config.sub config.sub
+	cp -f /usr/share/misc/config.guess config.guess
+	autoconf -I m4
+	touch $@
+
+configure: configure-stamp
+configure-stamp: reconf-stamp
+	dh_testdir
+	cp -f /usr/share/misc/config.sub config.sub
+	cp -f /usr/share/misc/config.guess config.guess
+
+	# simple version
+	NROFFPROG=/usr/bin/nroff CFLAGS="$(CFLAGS)" \
+	    CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" \
+	    dh_auto_configure --builddirectory=build-simple -- \
+		-v \
+		--with-all-insults \
+		--with-pam \
+		--with-fqdn \
+		--with-logging=syslog \
+		--with-logfac=authpriv \
+		--with-env-editor \
+		--with-editor=/usr/bin/editor \
+		--with-exampledir=/usr/share/doc/sudo/examples \
+		--with-timeout=15 \
+		--with-password-timeout=0 \
+		--with-passprompt="[sudo] password for %p: " \
+		--disable-root-mailer \
+		--with-sendmail=/usr/sbin/sendmail \
+		--with-rundir=/run/sudo \
+		--libexecdir=/usr/lib/sudo \
+		--with-sssd --with-sssd-lib=/usr/lib/$(DEB_HOST_MULTIARCH) \
+		$(configure_args)
+
+	# LDAP version
+	NROFFPROG=/usr/bin/nroff CFLAGS="$(CFLAGS)" \
+	    CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" \
+	    dh_auto_configure --builddirectory=build-ldap -- \
+		-v \
+		--with-all-insults \
+		--with-pam \
+		--with-ldap \
+		--with-fqdn \
+		--with-logging=syslog \
+		--with-logfac=authpriv \
+		--with-env-editor \
+		--with-editor=/usr/bin/editor \
+		--with-exampledir=/usr/share/doc/sudo-ldap/examples \
+		--with-timeout=15 \
+		--with-password-timeout=0 \
+		--with-passprompt="[sudo] password for %p: " \
+		--disable-root-mailer \
+		--disable-setresuid \
+		--with-sendmail=/usr/sbin/sendmail \
+		--with-rundir=/run/sudo \
+		--with-ldap-conf-file=/etc/sudo-ldap.conf \
+		--libexecdir=/usr/lib/sudo \
+		--with-sssd --with-sssd-lib=/usr/lib/$(DEB_HOST_MULTIARCH) \
+		$(configure_args)
+
+	touch configure-stamp
+
+build: build-arch build-indep
+build-arch: build-stamp
+build-indep: build-stamp
+build-stamp: configure-stamp
+	dh_testdir
+
+	$(MAKE) -C build-simple
+	$(MAKE) -C build-ldap
+
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	$(MAKE) -C build-simple check
+endif
+
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f configure-stamp build-stamp
+	rm -rf build-simple build-ldap
+	rm -f config.cache
+	dh_clean
+
+install: build-stamp
+	dh_testdir
+	dh_testroot
+	dh_prep
+	dh_installdirs
+
+	$(MAKE) -C build-simple install DESTDIR=$(CURDIR)/debian/sudo
+	$(MAKE) -C build-ldap   install DESTDIR=$(CURDIR)/debian/sudo-ldap
+
+	# remove stuff we don't want
+	rm -f	debian/sudo*/etc/sudoers \
+		debian/sudo*/usr/share/doc/sudo/LICENSE* \
+		debian/sudo*/usr/share/doc/sudo/ChangeLog
+
+	# provide upstream sudoers.dist as an alternate example
+	mv debian/sudo/etc/sudoers.dist \
+		debian/sudo/usr/share/doc/sudo/examples/sudoers.dist
+	mv debian/sudo-ldap/etc/sudoers.dist \
+		debian/sudo-ldap/usr/share/doc/sudo-ldap/examples/sudoers.dist
+
+	# /run/sudo directory is created at boot time and shouldn't be in the
+	# package
+	rm -rf debian/sudo*/run
+
+	# move upstream-installed docs to the right place for ldap package
+	mv	debian/sudo-ldap/usr/share/doc/sudo/* \
+		debian/sudo-ldap/usr/share/doc/sudo-ldap/
+	rmdir	debian/sudo-ldap/usr/share/doc/sudo
+
+	# and install things we do want that make install doesn't know about
+	install -o root -g root -m 0644 debian/sudo.pam \
+		debian/sudo/etc/pam.d/sudo
+	install -o root -g root -m 0644 debian/sudo.pam \
+		debian/sudo-ldap/etc/pam.d/sudo
+
+	install -o root -g root -m 0644 debian/sudo.lintian \
+		debian/sudo/usr/share/lintian/overrides/sudo
+	install -o root -g root -m 0644 debian/sudo-ldap.lintian \
+		debian/sudo-ldap/usr/share/lintian/overrides/sudo-ldap
+
+	install -o root -g root -m 0440 debian/sudoers \
+		debian/sudo/etc/sudoers
+	install -o root -g root -m 0440 debian/sudoers \
+		debian/sudo-ldap/etc/sudoers
+
+	install -o root -g root -m 0440 debian/README \
+		debian/sudo/etc/sudoers.d/README
+	install -o root -g root -m 0440 debian/README \
+		debian/sudo-ldap/etc/sudoers.d/README
+
+	# we don't want the initscript to run, the creation of the rundir and
+	# the cleanup the stamp files is now done by tmpfiles when using
+	# systemd
+	ln -s /dev/null debian/sudo/lib/systemd/system/sudo.service
+	ln -s /dev/null debian/sudo-ldap/lib/systemd/system/sudo.service
+
+binary-indep: build install
+
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installdocs -A
+	dh_installinit -psudo --name=sudo
+	dh_installinit -psudo-ldap --name=sudo-ldap
+	dh_installman -A
+	dh_installinfo -A
+	dh_installchangelogs ChangeLog
+	# clear dependency_libs field in .la files
+	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
+	dh_strip
+	dh_compress
+	dh_fixperms
+	chown root.root debian/sudo/usr/bin/sudo debian/sudo-ldap/usr/bin/sudo
+	chmod 4755 debian/sudo/usr/bin/sudo debian/sudo-ldap/usr/bin/sudo
+	chmod 0440	debian/sudo/etc/sudoers.d/README \
+			debian/sudo-ldap/etc/sudoers.d/README
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: configure build-indep build-arch build clean binary-indep binary-arch binary install
